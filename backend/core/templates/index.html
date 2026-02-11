@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HRMS Lite</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/babel-standalone@6/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/axios/1.6.2/axios.min.js"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f3f4f6; }
+        .fade-in { animation: fadeIn 0.3s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const API_BASE = "/api"; 
+
+        function App() {
+            const [employees, setEmployees] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [view, setView] = useState('list');
+            const [formData, setFormData] = useState({ emp_id: '', name: '', email: '', department: '' });
+            const [attendanceData, setAttendanceData] = useState({ date: new Date().toISOString().split('T')[0], status: 'Present' });
+            const [selectedEmp, setSelectedEmp] = useState(null);
+            const [error, setError] = useState('');
+
+            useEffect(() => { fetchEmployees(); }, []);
+
+            const fetchEmployees = async () => {
+                try {
+                    const res = await axios.get(`${API_BASE}/employees/`);
+                    setEmployees(res.data);
+                    setLoading(false);
+                } catch (err) {
+                    console.error("Fetch error:", err);
+                    setLoading(false);
+                }
+            };
+
+            const handleDelete = async (id) => {
+                if(!confirm("Delete this employee?")) return;
+                try {
+                    await axios.delete(`${API_BASE}/employees/${id}/`);
+                    fetchEmployees();
+                } catch(err) { alert("Error deleting."); }
+            };
+
+            const handleAdd = async (e) => {
+                e.preventDefault();
+                setError('');
+                try {
+                    await axios.post(`${API_BASE}/employees/`, formData);
+                    setFormData({ emp_id: '', name: '', email: '', department: '' });
+                    setView('list');
+                    fetchEmployees();
+                } catch (err) {
+                    setError("Error: Duplicate ID or Email.");
+                }
+            };
+
+            const handleMarkAttendance = async () => {
+                try {
+                    await axios.post(`${API_BASE}/attendance/`, {
+                        employee: selectedEmp.id,
+                        date: attendanceData.date,
+                        status: attendanceData.status
+                    });
+                    alert("Saved!");
+                    setSelectedEmp(null);
+                } catch (err) {
+                    alert("Already marked for this date.");
+                }
+            };
+
+            return (
+                <div className="min-h-screen p-8 max-w-5xl mx-auto font-sans">
+                    <header className="flex justify-between items-center mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-800">HRMS Lite</h1>
+                            <p className="text-gray-500 text-sm">Employee Portal</p>
+                        </div>
+                        <button 
+                            onClick={() => setView(view === 'list' ? 'add' : 'list')} 
+                            className="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition font-medium shadow-sm flex items-center gap-2"
+                        >
+                            {view === 'list' ? 
+                                <span><i className="fa-solid fa-plus"></i> Add Employee</span> : 
+                                <span>Back to List</span>
+                            }
+                        </button>
+                    </header>
+
+                    {view === 'add' && (
+                        <div className="bg-white p-8 rounded-xl shadow-lg mb-8 max-w-2xl mx-auto border border-gray-100 fade-in">
+                            <h2 className="text-xl font-bold mb-6 text-gray-800">New Employee</h2>
+                            {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{error}</div>}
+                            <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                                <input placeholder="ID" className="border p-2 rounded" value={formData.emp_id} onChange={e => setFormData({...formData, emp_id: e.target.value})} required />
+                                <input placeholder="Name" className="border p-2 rounded" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                                <input placeholder="Email" type="email" className="border p-2 rounded" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+                                <input placeholder="Department" className="border p-2 rounded" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} required />
+                                <button type="submit" className="bg-gray-900 text-white py-3 rounded col-span-2">Save</button>
+                            </form>
+                        </div>
+                    )}
+
+                    {loading ? <div className="text-center py-20 text-gray-500">Loading...</div> : (
+                        <div className="grid gap-4">
+                            {employees.map(emp => (
+                                <div key={emp.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center hover:shadow-md transition">
+                                    <div className="flex items-center gap-4">
+                                        <div className="bg-blue-100 text-blue-600 w-10 h-10 rounded-full flex items-center justify-center font-bold">
+                                            {emp.name.charAt(0)}
+                                        </div>
+                                        <div>
+                                            <h3 className="font-bold text-lg text-gray-800">{emp.name}</h3>
+                                            <p className="text-sm text-gray-500">{emp.emp_id} • {emp.department} • {emp.email}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-3">
+                                        <button onClick={() => setSelectedEmp(emp)} className="bg-gray-100 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-200">Attendance</button>
+                                        <button onClick={() => handleDelete(emp.id)} className="text-gray-400 hover:text-red-600 p-2"><i className="fa-solid fa-trash"></i></button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+
+                    {selectedEmp && (
+                        <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center fade-in">
+                            <div className="bg-white p-6 rounded-2xl shadow-2xl w-96">
+                                <h3 className="text-xl font-bold mb-4">Mark Attendance</h3>
+                                <p className="mb-4 text-gray-600">{selectedEmp.name}</p>
+                                <input type="date" className="border p-2 w-full mb-4 rounded" value={attendanceData.date} onChange={e => setAttendanceData({...attendanceData, date: e.target.value})} />
+                                <div className="flex gap-2 mb-4">
+                                    <button onClick={() => setAttendanceData({...attendanceData, status: 'Present'})} className={`flex-1 py-2 rounded ${attendanceData.status === 'Present' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>Present</button>
+                                    <button onClick={() => setAttendanceData({...attendanceData, status: 'Absent'})} className={`flex-1 py-2 rounded ${attendanceData.status === 'Absent' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}>Absent</button>
+                                </div>
+                                <button onClick={handleMarkAttendance} className="w-full bg-blue-600 text-white py-2 rounded">Confirm</button>
+                                <button onClick={() => setSelectedEmp(null)} className="w-full mt-2 text-gray-500 text-sm">Cancel</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
