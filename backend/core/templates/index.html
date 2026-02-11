@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>HRMS Lite</title>
+    <title>HRMS Lite - V2</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -25,6 +25,7 @@
 
         function App() {
             const [employees, setEmployees] = useState([]);
+            const [attendanceRecords, setAttendanceRecords] = useState([]); 
             const [loading, setLoading] = useState(true);
             const [view, setView] = useState('list');
             const [formData, setFormData] = useState({ emp_id: '', name: '', email: '', department: '' });
@@ -32,12 +33,16 @@
             const [selectedEmp, setSelectedEmp] = useState(null);
             const [error, setError] = useState('');
 
-            useEffect(() => { fetchEmployees(); }, []);
+            useEffect(() => { fetchAllData(); }, []);
 
-            const fetchEmployees = async () => {
+            const fetchAllData = async () => {
                 try {
-                    const res = await axios.get(`${API_BASE}/employees/`);
-                    setEmployees(res.data);
+                    const [empRes, attRes] = await Promise.all([
+                        axios.get(`${API_BASE}/employees/`),
+                        axios.get(`${API_BASE}/attendance/`)
+                    ]);
+                    setEmployees(empRes.data);
+                    setAttendanceRecords(attRes.data);
                     setLoading(false);
                 } catch (err) {
                     console.error("Fetch error:", err);
@@ -49,20 +54,34 @@
                 if(!confirm("Delete this employee?")) return;
                 try {
                     await axios.delete(`${API_BASE}/employees/${id}/`);
-                    fetchEmployees();
+                    fetchAllData();
                 } catch(err) { alert("Error deleting."); }
             };
 
             const handleAdd = async (e) => {
                 e.preventDefault();
                 setError('');
+
+                // 1. Numeric ID Validation
+                const isNumeric = /^\d+$/.test(formData.emp_id);
+                if (!isNumeric) {
+                    setError("Invalid ID: Please enter a numeric number only.");
+                    return;
+                }
+
+                // 2. Gmail Validation
+                if (!formData.email.toLowerCase().endsWith("@gmail.com")) {
+                    setError("Invalid Email: Please enter a valid @gmail.com address.");
+                    return;
+                }
+
                 try {
                     await axios.post(`${API_BASE}/employees/`, formData);
                     setFormData({ emp_id: '', name: '', email: '', department: '' });
                     setView('list');
-                    fetchEmployees();
+                    fetchAllData();
                 } catch (err) {
-                    setError("Error: Duplicate ID or Email.");
+                    setError("Error: This ID or Email already exists in the system.");
                 }
             };
 
@@ -73,8 +92,9 @@
                         date: attendanceData.date,
                         status: attendanceData.status
                     });
-                    alert("Saved!");
+                    alert("Attendance marked!");
                     setSelectedEmp(null);
+                    fetchAllData(); 
                 } catch (err) {
                     alert("Already marked for this date.");
                 }
@@ -84,68 +104,87 @@
                 <div className="min-h-screen p-8 max-w-5xl mx-auto font-sans">
                     <header className="flex justify-between items-center mb-8 bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                         <div>
-                            <h1 className="text-3xl font-bold text-gray-800">HRMS Lite</h1>
-                            <p className="text-gray-500 text-sm">Employee Portal</p>
+                            <h1 className="text-3xl font-bold text-gray-800 tracking-tight">HRMS Lite</h1>
+                            <p className="text-gray-500 text-sm">Real-time Attendance Dashboard</p>
                         </div>
                         <button 
-                            onClick={() => setView(view === 'list' ? 'add' : 'list')} 
+                            onClick={() => { setView(view === 'list' ? 'add' : 'list'); setError(''); }} 
                             className="bg-blue-600 text-white px-6 py-2.5 rounded-lg hover:bg-blue-700 transition font-medium shadow-sm flex items-center gap-2"
                         >
-                            {view === 'list' ? 
-                                <span><i className="fa-solid fa-plus"></i> Add Employee</span> : 
-                                <span>Back to List</span>
-                            }
+                            {view === 'list' ? <span>+ Add Employee</span> : <span>Back to List</span>}
                         </button>
                     </header>
 
                     {view === 'add' && (
                         <div className="bg-white p-8 rounded-xl shadow-lg mb-8 max-w-2xl mx-auto border border-gray-100 fade-in">
                             <h2 className="text-xl font-bold mb-6 text-gray-800">New Employee</h2>
-                            {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm">{error}</div>}
+                            {error && <div className="bg-red-50 text-red-600 p-3 rounded mb-4 text-sm font-medium border border-red-100">{error}</div>}
                             <form onSubmit={handleAdd} className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                                <input placeholder="ID" className="border p-2 rounded" value={formData.emp_id} onChange={e => setFormData({...formData, emp_id: e.target.value})} required />
-                                <input placeholder="Name" className="border p-2 rounded" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
-                                <input placeholder="Email" type="email" className="border p-2 rounded" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
+                                <input placeholder="Numeric ID" className="border p-2 rounded" value={formData.emp_id} onChange={e => setFormData({...formData, emp_id: e.target.value})} required />
+                                <input placeholder="Full Name" className="border p-2 rounded" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} required />
+                                <input placeholder="Gmail Address" type="email" className="border p-2 rounded" value={formData.email} onChange={e => setFormData({...formData, email: e.target.value})} required />
                                 <input placeholder="Department" className="border p-2 rounded" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} required />
-                                <button type="submit" className="bg-gray-900 text-white py-3 rounded col-span-2">Save</button>
+                                <button type="submit" className="bg-gray-900 text-white py-3 rounded col-span-2 hover:bg-black transition font-bold tracking-wide">Save Record</button>
                             </form>
                         </div>
                     )}
 
-                    {loading ? <div className="text-center py-20 text-gray-500">Loading...</div> : (
+                    {loading ? <div className="text-center py-20 text-gray-500">Loading records...</div> : (
                         <div className="grid gap-4">
-                            {employees.map(emp => (
-                                <div key={emp.id} className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center hover:shadow-md transition">
-                                    <div className="flex items-center gap-4">
-                                        <div className="bg-blue-100 text-blue-600 w-10 h-10 rounded-full flex items-center justify-center font-bold">
-                                            {emp.name.charAt(0)}
+                            {employees.map(emp => {
+                                const today = new Date().toISOString().split('T')[0];
+                                const record = attendanceRecords.find(r => r.employee === emp.id && r.date === today);
+                                
+                                const indicatorColor = record 
+                                    ? (record.status === 'Present' ? 'bg-green-500' : 'bg-red-500') 
+                                    : 'bg-gray-300';
+                                
+                                const borderStyle = record 
+                                    ? (record.status === 'Present' ? 'border-l-green-500' : 'border-l-red-500') 
+                                    : 'border-l-gray-200';
+
+                                return (
+                                    <div key={emp.id} className={`bg-white p-5 rounded-xl shadow-sm border-l-4 ${borderStyle} flex justify-between items-center hover:shadow-md transition fade-in`}>
+                                        <div className="flex items-center gap-4">
+                                            <div className={`${indicatorColor} text-white w-10 h-10 rounded-full flex items-center justify-center font-bold shadow-sm`}>
+                                                {emp.name.charAt(0)}
+                                            </div>
+                                            <div>
+                                                <h3 className="font-bold text-lg text-gray-800">{emp.name} 
+                                                    {record && <span className={`ml-2 text-xs px-2 py-0.5 rounded-full ${record.status === 'Present' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>{record.status}</span>}
+                                                </h3>
+                                                <p className="text-sm text-gray-500">ID: {emp.emp_id} • {emp.department}</p>
+                                            </div>
                                         </div>
-                                        <div>
-                                            <h3 className="font-bold text-lg text-gray-800">{emp.name}</h3>
-                                            <p className="text-sm text-gray-500">{emp.emp_id} • {emp.department} • {emp.email}</p>
+                                        <div className="flex gap-3">
+                                            <button 
+                                                onClick={() => setSelectedEmp(emp)} 
+                                                className="bg-gray-50 border border-gray-200 text-gray-700 px-4 py-2 rounded-lg text-sm hover:bg-blue-50 hover:text-blue-600 transition font-medium"
+                                            >
+                                                Attendance
+                                            </button>
+                                            <button onClick={() => handleDelete(emp.id)} className="text-gray-300 hover:text-red-600 p-2 transition">
+                                                <i className="fa-solid fa-trash"></i>
+                                            </button>
                                         </div>
                                     </div>
-                                    <div className="flex gap-3">
-                                        <button onClick={() => setSelectedEmp(emp)} className="bg-gray-100 text-gray-700 px-4 py-2 rounded text-sm hover:bg-gray-200">Attendance</button>
-                                        <button onClick={() => handleDelete(emp.id)} className="text-gray-400 hover:text-red-600 p-2"><i className="fa-solid fa-trash"></i></button>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
 
                     {selectedEmp && (
-                        <div className="fixed inset-0 bg-gray-900/50 flex items-center justify-center fade-in">
+                        <div className="fixed inset-0 bg-gray-900/50 backdrop-blur-sm flex items-center justify-center fade-in z-50">
                             <div className="bg-white p-6 rounded-2xl shadow-2xl w-96">
                                 <h3 className="text-xl font-bold mb-4">Mark Attendance</h3>
-                                <p className="mb-4 text-gray-600">{selectedEmp.name}</p>
+                                <p className="mb-6 text-gray-600 bg-gray-50 p-3 rounded font-medium">{selectedEmp.name}</p>
                                 <input type="date" className="border p-2 w-full mb-4 rounded" value={attendanceData.date} onChange={e => setAttendanceData({...attendanceData, date: e.target.value})} />
-                                <div className="flex gap-2 mb-4">
-                                    <button onClick={() => setAttendanceData({...attendanceData, status: 'Present'})} className={`flex-1 py-2 rounded ${attendanceData.status === 'Present' ? 'bg-green-600 text-white' : 'bg-gray-200'}`}>Present</button>
-                                    <button onClick={() => setAttendanceData({...attendanceData, status: 'Absent'})} className={`flex-1 py-2 rounded ${attendanceData.status === 'Absent' ? 'bg-red-600 text-white' : 'bg-gray-200'}`}>Absent</button>
+                                <div className="grid grid-cols-2 gap-2 mb-6">
+                                    <button onClick={() => setAttendanceData({...attendanceData, status: 'Present'})} className={`py-3 rounded-lg border font-medium transition ${attendanceData.status === 'Present' ? 'bg-green-600 text-white border-green-600' : 'bg-white text-gray-600'}`}>Present</button>
+                                    <button onClick={() => setAttendanceData({...attendanceData, status: 'Absent'})} className={`py-3 rounded-lg border font-medium transition ${attendanceData.status === 'Absent' ? 'bg-red-600 text-white border-red-600' : 'bg-gray-200 text-gray-600'}`}>Absent</button>
                                 </div>
-                                <button onClick={handleMarkAttendance} className="w-full bg-blue-600 text-white py-2 rounded">Confirm</button>
-                                <button onClick={() => setSelectedEmp(null)} className="w-full mt-2 text-gray-500 text-sm">Cancel</button>
+                                <button onClick={handleMarkAttendance} className="w-full bg-blue-600 text-white py-3 rounded-lg font-bold">Confirm Status</button>
+                                <button onClick={() => setSelectedEmp(null)} className="w-full mt-2 text-gray-400 text-sm">Cancel</button>
                             </div>
                         </div>
                     )}
